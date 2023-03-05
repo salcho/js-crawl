@@ -1,4 +1,11 @@
-// simple
+obj = {};
+      key = "foo";
+      a = "a";
+      b = "b";
+      obj["__proto__"];
+      obj["constructor"];
+      
+      // simple
       obj[key];
       obj[key] = 1;
       
@@ -14,6 +21,7 @@
       obj[obj[obj[obj[a]]]] = 1;
       
       // in series
+      obj[a] = {};
       obj[a][b] = 1;
       obj[obj[a]][b] = 1;
       obj[a][obj[b]] = 1;

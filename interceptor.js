@@ -14,8 +14,10 @@ class Interceptor extends BaseCollector {
         {includes: 'text/javascript', isHTML: false}
     ];
 
-	constructor() {
+	constructor(reportTo) {
 		super();
+		// the *name* of the function that has been made available on the global scope
+		this.callback = reportTo;
 	}
 
 	id() {
@@ -23,12 +25,13 @@ class Interceptor extends BaseCollector {
 	}
 
 	async addTarget({cdpClient, page}) {
-		console.log(page);
-		// enable interception of requests *in the response stage*
+		// enable interception of responses with scripts in the response stage
 		await cdpClient.send("Fetch.enable", {
-			patterns: [{ requestStage: "Response" }]
+			patterns: [
+				{ requestStage: "Response", resourceType: "Document" },
+				{ requestStage: "Response", resourceType: "Script" },
+			]
 		  });
-
         
         // funnel all intercepted requests
 		await Promise.all([
@@ -38,7 +41,8 @@ class Interceptor extends BaseCollector {
 
 	// data is https://chromedevtools.github.io/devtools-protocol/tot/Fetch/#event-requestPaused
 	async handlePausedRequest(data, cdpClient) {
-        // we're in the response stage, so we can simply get the body
+		// we're in the response stage, so we can simply get the body
+		// TODO: this command will fail if the headers haven't been received yet
 		const originalBody = await cdpClient.send('Fetch.getResponseBody', {
 			requestId: data.requestId
 		});
@@ -88,7 +92,6 @@ class Interceptor extends BaseCollector {
         }
 
         // otherwise it's javascript
-        console.log(`itsJS`);
         return this.instrumentJavascipt(body);
     }
 
@@ -124,7 +127,7 @@ class Interceptor extends BaseCollector {
 			// fall through
 		}
 	
-		const call = typeBuilders.callExpression(typeBuilders.identifier('foo'), [node.property]);
+		const call = typeBuilders.callExpression(typeBuilders.identifier(this.callback), [node.property]);
 		node.property = call;
 		return node;
 	}
