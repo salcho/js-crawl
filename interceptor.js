@@ -22,7 +22,8 @@ class Interceptor extends BaseCollector {
 		'interceptor';
 	}
 
-	async addTarget({cdpClient}) {
+	async addTarget({cdpClient, page}) {
+		console.log(page);
 		// enable interception of requests *in the response stage*
 		await cdpClient.send("Fetch.enable", {
 			patterns: [{ requestStage: "Response" }]
