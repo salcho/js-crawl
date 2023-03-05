@@ -1,59 +1,8 @@
 const puppeteer = require('puppeteer');
+const { crawler } = require('tracker-radar-collector');
+const Interceptor = require('./interceptor');
 const modify = require('puppeteer-intercept-and-modify-requests');
 const RequestInterceptionManager = modify.RequestInterceptionManager;
-
-const parse = require('esprima').parse;
-const generate = require('escodegen').generate;
-const replace = require('ast-replace');
-const typeBuilders = require('ast-types').builders;
-
-function replaceBody(body) {
-	const ast = replace(parse(body), {
-		MemberExpression: {
-			test: node => node.computed,
-			replace: replaceMemberExpression
-		}
-	});
-	return generate(ast);
-}
-
-// esprima only matches the top level MemberExpression, even when they're nested
-// for example obj[a][b], so this function must be recursive
-function replaceMemberExpression(node) {
-	// deal with `obj[a]` when `obj[a][b]`
-	if (node.object.type === 'MemberExpression') {
-        node.object = replaceMemberExpression(node.object);
-    }
-
-	switch (node.property.type) {
-		// deal with `obj[a]` when `obj[obj[a]]`
-		case 'MemberExpression':
-			node.property = replaceMemberExpression(node.property);
-			break;
-		// deal with `obj[b]` when `obj[a + obj[b]]`, on either side of the plus
-		case 'BinaryExpression':
-			node.property = replaceMemberExpressionForBinary(node.property);
-			break;
-		default:
-			// fall through
-	}
-
-    const call = typeBuilders.callExpression(typeBuilders.identifier('foo'), [node.property]);
-    node.property = call; 
-    return node;
-}
-
-function replaceMemberExpressionForBinary(binary) {
-	if (binary.left.type === 'MemberExpression') {
-		binary.left = replaceMemberExpression(binary.left);
-	}
-
-	if (binary.right.type === 'MemberExpression') {
-		binary.right = replaceMemberExpression(binary.right);
-	}
-
-	return binary;
-}
 
 async function browseModifyAndCaptureSelector(url) {
 	const browser = await puppeteer.launch();
@@ -84,4 +33,21 @@ async function browseModifyAndCaptureSelector(url) {
 }
 
 const url = new URL('https://superficial-delicious-stamp.glitch.me/js.js');
-(async () => browseModifyAndCaptureSelector(url))();
+
+async function doIt() {
+	// await crawler(new URL('https://example.org'), {
+	await crawler(url, {
+		// collectors: [new RequestCollector()],
+		collectors: [new Interceptor()],
+		log: (...msg) => msg.forEach(x => console.log(x)),
+		emulateMobile: false,
+		emulateUserAgent: true,
+		runInEveryFrame: () => { window.alert('injected') },// function that should be executed in every frame (main + all subframes)
+		maxLoadTimeMs: 30000,// how long should the crawler wait for the page to load, defaults to 30s
+		extraExecutionTimeMs: 2500,// how long should crawler wait after page loads before collecting data, defaults to 2.5s);
+	});
+}
+
+doIt();
+
+//(async () => browseModifyAndCaptureSelector(url))();

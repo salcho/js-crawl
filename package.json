@@ -4,6 +4,7 @@
     "escodegen": "^2.0.0",
     "esprima": "^4.0.1",
     "puppeteer": "^19.7.2",
-    "puppeteer-intercept-and-modify-requests": "^1.1.0"
+    "puppeteer-intercept-and-modify-requests": "^1.1.0",
+    "tracker-radar-collector": "github:duckduckgo/tracker-radar-collector"
   }
 }
