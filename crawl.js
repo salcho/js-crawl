@@ -32,12 +32,11 @@ async function browseModifyAndCaptureSelector(url) {
 	await browser.close();
 }
 
-const url = new URL('https://superficial-delicious-stamp.glitch.me/js.js');
+const url = new URL('https://superficial-delicious-stamp.glitch.me/js.htm');
 
 async function doIt() {
 	// await crawler(new URL('https://example.org'), {
 	await crawler(url, {
-		// collectors: [new RequestCollector()],
 		collectors: [new Interceptor()],
 		log: (...msg) => msg.forEach(x => console.log(x)),
 		emulateMobile: false,

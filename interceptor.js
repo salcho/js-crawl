@@ -1,10 +1,19 @@
-const { RequestCollector, CookieCollector, BaseCollector} = require('tracker-radar-collector');
+const { BaseCollector} = require('tracker-radar-collector');
+const jsdom = require('jsdom');
 const parse = require('esprima').parse;
 const generate = require('escodegen').generate;
 const replace = require('ast-replace');
 const typeBuilders = require('ast-types').builders;
 
 class Interceptor extends BaseCollector {
+
+    // list of content types we want to inspect and instrument
+    // these values are used each in an `includes` call to the actual content type header
+    SCRIPT_CONTENT_TYPES = [
+        {includes: 'text/html', isHTML: true},
+        {includes: 'text/javascript', isHTML: false}
+    ];
+
 	constructor() {
 		super();
 	}
@@ -33,21 +42,7 @@ class Interceptor extends BaseCollector {
 			requestId: data.requestId
 		});
 
-        // TODO: add content types to this filter
-		const hasScripts = data.responseHeaders.some(h => h.name === "content-type" && h.value.includes('text/html'));
-        let body = originalBody.body;
-        if (hasScripts) {
-			if (originalBody.base64Encoded) {
-				body = Buffer.from(body, 'base64').toString();
-			}
-
-			// instrument JS
-			body = this.replaceBody(body);
-
-			if (originalBody.base64Encoded) {
-				body = btoa(body);
-			}
-		}
+        let body = this.maybeModifyResponse(originalBody, data.responseHeaders);
 
 		await cdpClient.send('Fetch.fulfillRequest', {
 			requestId: data.requestId,
@@ -56,28 +51,57 @@ class Interceptor extends BaseCollector {
 		});
 	}
 
-	replaceBody(body) {
+    maybeModifyResponse(originalBody, responseHeaders) {
+        const contentType = responseHeaders.find(h => h.name === "content-type" && this.SCRIPT_CONTENT_TYPES.some(ct => h.value.includes(ct.includes)));
+        if (!contentType) {
+            return originalBody.body;
+        }
+
+        let body = originalBody.body;
+        if (originalBody.base64Encoded) {
+            body = Buffer.from(body, 'base64').toString();
+        }
+
+        // instrument JS
+        body = this.extractScripts(body, contentType.value);
+
+        if (originalBody.base64Encoded) {
+            body = btoa(body);
+        }
+
+        return body;
+    }
+
+    extractScripts(body, responseContentType) {
+        const contentType = this.SCRIPT_CONTENT_TYPES.find(ct => responseContentType.includes(ct.includes))
+        
+        if (contentType.isHTML) {
+            const dom = new jsdom.JSDOM(body);
+            const inlineScripts = Array.from(dom.window.document.querySelectorAll('script'))
+                // is inline script
+                .filter(s => !s.hasAttribute('src'))
+                // instrument
+                .forEach(s => s.text = this.instrumentJavascipt(s.text));
+
+            return dom.serialize();
+        }
+
+        // otherwise it's javascript
+        console.log(`itsJS`);
+        return this.instrumentJavascipt(body);
+    }
+
+	instrumentJavascipt(body) {
 		const ast = replace(parse(body), {
 			MemberExpression: {
 				test: node => node.computed,
 				replace: this.replaceMemberExpression.bind(this)
 			}
 		});
-		return generate(ast);
-	}
-	
-	replaceMemberExpressionForBinary(binary) {
-		if (binary.left.type === 'MemberExpression') {
-			binary.left = this.replaceMemberExpression(binary.left);
-		}
-	
-		if (binary.right.type === 'MemberExpression') {
-			binary.right = this.replaceMemberExpression(binary.right);
-		}
-	
-		return binary;
-	}
 
+        return generate(ast);
+	}
+	
 	// esprima only matches the top level MemberExpression, even when they're nested
 	// for example obj[a][b], so this function must be recursive
 	replaceMemberExpression(node) {
@@ -102,6 +126,18 @@ class Interceptor extends BaseCollector {
 		const call = typeBuilders.callExpression(typeBuilders.identifier('foo'), [node.property]);
 		node.property = call;
 		return node;
+	}
+
+	replaceMemberExpressionForBinary(binary) {
+		if (binary.left.type === 'MemberExpression') {
+			binary.left = this.replaceMemberExpression(binary.left);
+		}
+	
+		if (binary.right.type === 'MemberExpression') {
+			binary.right = this.replaceMemberExpression(binary.right);
+		}
+	
+		return binary;
 	}
 }
 
