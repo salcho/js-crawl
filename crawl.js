@@ -12,7 +12,7 @@ function peekAtArgument() {
 				// call metrics
 				window.navigator.sendBeacon("http://localhost:8081/me", JSON.stringify({ arg, url: window.location.href }));
 			}
-			puppeteer-intercept-and-modify-requests
+
 			return arg;
 		}
 		// make the reporting function available to everyone
